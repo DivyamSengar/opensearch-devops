@@ -23,8 +23,8 @@ def query_knowledge_base_streaming(query):
                 'knowledgeBaseId': '5FBGMYGHPK',
                 
                 # Model Selection - Comment/uncomment to switch
-                # 'modelArn': 'arn:aws:bedrock:us-west-2:691536381143:inference-profile/claude-4-sonnet-profile',  # Claude 4 Sonnet
-                'modelArn': 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0',  # Claude 3.5 Sonnet
+                'modelArn': 'arn:aws:bedrock:us-west-2:691536381143:inference-profile/us.anthropic.claude-sonnet-4-20250514-v1:0',  # Claude 4 Sonnet
+                # 'modelArn': 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0',  # Claude 3.5 Sonnet
                 
                 # Retrieval Configuration - Controls document search
                 'retrievalConfiguration': {
