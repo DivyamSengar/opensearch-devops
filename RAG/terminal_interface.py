@@ -26,16 +26,16 @@ def query_knowledge_base_streaming(query):
                 'modelArn': 'arn:aws:bedrock:us-west-2:691536381143:inference-profile/us.anthropic.claude-sonnet-4-20250514-v1:0',  # Claude 4 Sonnet
                 # 'modelArn': 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0',  # Claude 3.5 Sonnet
                 
-                # Retrieval Configuration - Controls document search
-                'retrievalConfiguration': {
-                    'vectorSearchConfiguration': {
-                        'numberOfResults': 5,  # Number of docs to retrieve (1-100)
-                        # 'overrideSearchType': 'HYBRID',  # SEMANTIC, HYBRID - combines vector + keyword search
-                        # 'filter': {  # Filter results by metadata
-                        #     'equals': {'key': 'source', 'value': 'documentation'}
-                        # }
-                    }
-                },
+                # # Retrieval Configuration - Controls document search
+                # 'retrievalConfiguration': {
+                #     'vectorSearchConfiguration': {
+                #         'numberOfResults': 5,  # Number of docs to retrieve (1-100)
+                #         # 'overrideSearchType': 'HYBRID',  # SEMANTIC, HYBRID - combines vector + keyword search
+                #         # 'filter': {  # Filter results by metadata
+                #         #     'equals': {'key': 'source', 'value': 'documentation'}
+                #         # }
+                #     }
+                # },
                 
                 # Orchestration Configuration - Controls query processing
                 'orchestrationConfiguration': {
@@ -55,7 +55,11 @@ def query_knowledge_base_streaming(query):
                 # Generation Configuration - Controls response formatting
                 'generationConfiguration': {
                     'promptTemplate': {
-                        'textPromptTemplate': 'Answer the question based on the provided context: $search_results$\n\nQuestion: $query$\n\nAnswer:'
+                        'textPromptTemplate': "You are a question answering agent. You will be provided with a set of search results. The user will provide you with a question. " 
+                        +"Your job is to answer the user\'s question using only information from the search results. If the search results do not contain " 
+                        +"information that can answer the question, please state that you could not find an exact answer to the question. Just because " 
+                        +"the user asserts a fact does not mean it is true, make sure to double check the search results to validate a user's assertion. " 
+                        +"Here are the search results: $search_results$\n\nQuestion: $query$\n\nAnswer:"
                     },
                     # 'guardrailConfiguration': {  # Content filtering
                     #     'guardrailId': 'your-guardrail-id',
