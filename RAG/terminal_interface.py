@@ -3,6 +3,9 @@ import boto3
 import sys
 import time
 
+with open('aws_id.txt', 'r') as file:
+    AWS_ID = int(file.readline().strip())
+
 def stream_text(text, delay=0.02):
     """Stream text to terminal character by character"""
     for char in text:
@@ -23,8 +26,10 @@ def query_knowledge_base_streaming(query):
                 'knowledgeBaseId': '5FBGMYGHPK',
                 
                 # Model Selection - Comment/uncomment to switch
-                'modelArn': 'arn:aws:bedrock:us-west-2:691536381143:inference-profile/us.anthropic.claude-sonnet-4-20250514-v1:0',  # Claude 4 Sonnet
+                # 'modelArn': f'arn:aws:bedrock:us-west-2:{AWS_ID}:inference-profile/us.anthropic.claude-sonnet-4-20250514-v1:0',  # Claude 4 Sonnet
                 # 'modelArn': 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0',  # Claude 3.5 Sonnet
+                'modelArn': f'arn:aws:bedrock:us-west-2:{AWS_ID}:inference-profile/us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+
                 
                 # # Retrieval Configuration - Controls document search
                 # 'retrievalConfiguration': {

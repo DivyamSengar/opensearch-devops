@@ -3,6 +3,18 @@ import boto3
 import sys
 import time
 
+with open('aws_id.txt', 'r') as file:
+    AWS_ID = int(file.readline().strip())
+
+# Read AWS credentials if stored in file
+try:
+    with open('aws_credentials.txt', 'r') as file:
+        aws_access_key = file.readline().strip()
+        aws_secret_key = file.readline().strip()
+except FileNotFoundError:
+    aws_access_key = None
+    aws_secret_key = None
+
 def stream_text(text, delay=0.02):
     """Stream text to terminal character by character"""
     for char in text:
@@ -15,10 +27,18 @@ session_id = None
 
 def query_knowledge_base_streaming(query):
     global session_id
-    client = boto3.client('bedrock-agent-runtime', region_name='us-west-2')
+    # Create client with credentials if available
+    if aws_access_key and aws_secret_key:
+        client = boto3.client(
+            'bedrock-agent-runtime',
+            region_name='us-west-2',
+            aws_access_key_id=aws_access_key,
+            aws_secret_access_key=aws_secret_key
+        )
+    else:
+        client = boto3.client('bedrock-agent-runtime', region_name='us-west-2')
     
     print("\n🔍 Searching knowledge base...")
-    
     # Build request
     request = {
         'input': {'text': query},
@@ -26,7 +46,10 @@ def query_knowledge_base_streaming(query):
             'type': 'KNOWLEDGE_BASE',
             'knowledgeBaseConfiguration': {
                 'knowledgeBaseId': '5FBGMYGHPK',
-                'modelArn': 'arn:aws:bedrock:us-west-2:691536381143:inference-profile/us.anthropic.claude-sonnet-4-20250514-v1:0',
+                # 'modelArn': f'arn:aws:bedrock:us-west-2:{AWS_ID}:inference-profile/us.anthropic.claude-sonnet-4-20250514-v1:0',
+                # 'modelArn': 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0',
+                'modelArn': f'arn:aws:bedrock:us-west-2:{AWS_ID}:inference-profile/us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+
                 'orchestrationConfiguration': {
                     'queryTransformationConfiguration': {
                         'type': 'QUERY_DECOMPOSITION'
