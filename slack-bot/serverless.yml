@@ -1,0 +1,74 @@
+service: oscar-slack-bot
+
+provider:
+  name: aws
+  runtime: python3.9
+  region: us-west-2
+  timeout: 30
+  memorySize: 512
+  environment:
+    SLACK_BOT_TOKEN: ${env:SLACK_BOT_TOKEN}
+    SLACK_SIGNING_SECRET: ${env:SLACK_SIGNING_SECRET}
+    KNOWLEDGE_BASE_ID: ${env:KNOWLEDGE_BASE_ID}
+    MODEL_ARN: ${env:MODEL_ARN}
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - bedrock:InvokeModel
+        - bedrock-agent-runtime:Retrieve
+        - bedrock-agent-runtime:RetrieveAndGenerate
+      Resource: "*"
+    - Effect: Allow
+      Action:
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:DeleteItem
+        - dynamodb:Query
+      Resource: 
+        - "arn:aws:dynamodb:${self:provider.region}:*:table/oscar-sessions"
+        - "arn:aws:dynamodb:${self:provider.region}:*:table/oscar-context"
+
+functions:
+  slack-bot:
+    handler: app.lambda_handler
+    events:
+      - http:
+          path: /slack/events
+          method: post
+    reservedConcurrency: 10
+
+resources:
+  Resources:
+    OscarSessionsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: oscar-sessions
+        AttributeDefinitions:
+          - AttributeName: session_key
+            AttributeType: S
+        KeySchema:
+          - AttributeName: session_key
+            KeyType: HASH
+        TimeToLiveSpecification:
+          AttributeName: ttl
+          Enabled: true
+        BillingMode: PAY_PER_REQUEST
+    
+    OscarContextTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: oscar-context
+        AttributeDefinitions:
+          - AttributeName: thread_key
+            AttributeType: S
+        KeySchema:
+          - AttributeName: thread_key
+            KeyType: HASH
+        TimeToLiveSpecification:
+          AttributeName: ttl
+          Enabled: true
+        BillingMode: PAY_PER_REQUEST
+
+plugins:
+  - serverless-python-requirements
