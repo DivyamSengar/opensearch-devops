@@ -1,3 +1,4 @@
 aws_id.txt
 .env
 .env.example
+DEPLOYMENT_GUIDE.md
