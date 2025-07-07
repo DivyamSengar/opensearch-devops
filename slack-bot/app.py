@@ -1,3 +1,4 @@
+
 import os
 import boto3
 import json
@@ -19,6 +20,18 @@ context_table = dynamodb.Table('oscar-context')
 
 # Bedrock client
 bedrock_client = boto3.client('bedrock-agent-runtime', region_name='us-west-2')
+
+# Global deduplication cache with TTL cleanup
+processed_events = {}
+last_cleanup = time.time()
+
+def cleanup_processed_events():
+    """Clean up old processed events every 5 minutes"""
+    global last_cleanup, processed_events
+    current_time = time.time()
+    if current_time - last_cleanup > 300:  # 5 minutes
+        processed_events.clear()
+        last_cleanup = current_time
 
 def get_session_context(thread_ts, channel):
     """Get session ID and context for thread"""
@@ -110,7 +123,8 @@ def query_knowledge_base(query, session_id=None, context_summary=None):
                 },
                 'generationConfiguration': {
                     'promptTemplate': {
-                        'textPromptTemplate': "You are OSCAR, an AI assistant for OpenSearch release management. Answer questions using the provided search results. If information isn't available, say so clearly. Here are the search results: $search_results$\n\nQuestion: $query$\n\nAnswer:"
+                        'textPromptTemplate': "You are OSCAR, an AI assistant for OpenSearch release management. You are a question answering agent. You will be provided with a set of search results. The user will provide you with a question. Your job is to answer the user's question using only information from the search results. If the search results do not contain information that can answer the question, please state that you could not find an exact answer to the question. Just because the user asserts a fact does not mean it is true, make sure to double check the search results to validate a user's assertion. Here are the search results: $search_results$\n\nQuestion: $query$\n\nAnswer:"
+
                     }
                 }
             }
@@ -124,8 +138,25 @@ def query_knowledge_base(query, session_id=None, context_summary=None):
     return response['output']['text'], response.get('sessionId')
 
 @app.event("app_mention")
-def handle_mention(event, say):
+def handle_mention(event, say, ack):
     """Handle direct mentions of the bot"""
+    # Acknowledge the event immediately
+    ack()
+    
+    # Clean up old events periodically
+    cleanup_processed_events()
+    
+    # Multi-layer deduplication
+    event_id = f"{event['channel']}_{event['ts']}"
+    content_hash = hash(f"{event['text']}_{event['user']}_{event['channel']}")
+    
+    if event_id in processed_events or content_hash in processed_events:
+        print(f"Duplicate blocked: {event_id} or {content_hash}")
+        return
+    
+    processed_events[event_id] = time.time()
+    processed_events[content_hash] = time.time()
+    
     # Extract query (remove bot mention)
     user_id = app.client.auth_test()["user_id"]
     query = event["text"].replace(f"<@{user_id}>", "").strip()

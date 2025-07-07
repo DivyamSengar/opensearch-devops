@@ -15,9 +15,24 @@ provider:
     - Effect: Allow
       Action:
         - bedrock:InvokeModel
+        - bedrock:RetrieveAndGenerate
+        - bedrock:Retrieve
+        - bedrock:GetFoundationModel
+        - bedrock:ListFoundationModels
+        - bedrock:GetKnowledgeBase
+        - bedrock:ListKnowledgeBases
+        - bedrock:GetInferenceProfile
+        - bedrock:ListInferenceProfiles
         - bedrock-agent-runtime:Retrieve
         - bedrock-agent-runtime:RetrieveAndGenerate
+        - bedrock-agent-runtime:InvokeAgent
       Resource: "*"
+    - Effect: Allow
+      Action:
+        - bedrock:InvokeModel
+      Resource: 
+        - "arn:aws:bedrock:${self:provider.region}:*:inference-profile/*"
+        - "arn:aws:bedrock:${self:provider.region}::foundation-model/*"
     - Effect: Allow
       Action:
         - dynamodb:GetItem
@@ -28,7 +43,6 @@ provider:
       Resource: 
         - "arn:aws:dynamodb:${self:provider.region}:*:table/oscar-sessions"
         - "arn:aws:dynamodb:${self:provider.region}:*:table/oscar-context"
-
 functions:
   slack-bot:
     handler: app.lambda_handler
