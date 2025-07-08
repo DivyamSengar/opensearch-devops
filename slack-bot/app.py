@@ -3,8 +3,10 @@ import os
 import boto3
 import json
 import time
+import hashlib
 from slack_bolt import App
 from slack_bolt.adapter.aws_lambda import SlackRequestHandler
+from botocore.exceptions import ClientError
 
 # Initialize Slack app
 app = App(
@@ -21,17 +23,55 @@ context_table = dynamodb.Table('oscar-context')
 # Bedrock client
 bedrock_client = boto3.client('bedrock-agent-runtime', region_name='us-west-2')
 
-# Global deduplication cache with TTL cleanup
-processed_events = {}
-last_cleanup = time.time()
+def create_robust_event_id(event):
+    """Create robust event fingerprint for unique message identification"""
+    # Use exact timestamp for unique message ID
+    message_ts = event['ts']
+    content_hash = hashlib.md5(event['text'].encode()).hexdigest()[:8]
+    
+    return f"{event['channel']}_{event['user']}_{message_ts}_{content_hash}"
 
-def cleanup_processed_events():
-    """Clean up old processed events every 5 minutes"""
-    global last_cleanup, processed_events
-    current_time = time.time()
-    if current_time - last_cleanup > 300:  # 5 minutes
-        processed_events.clear()
-        last_cleanup = current_time
+def is_duplicate_event(event_id):
+    """Check for duplicates using DynamoDB atomic operations"""
+    try:
+        sessions_table.put_item(
+            Item={
+                'session_key': f"dedup_{event_id}",
+                'processed': True,
+                'ttl': int(time.time()) + 300  # 5 min TTL
+            },
+            ConditionExpression='attribute_not_exists(session_key)'
+        )
+        return False  # Not duplicate
+    except ClientError as e:
+        if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
+            return True  # Duplicate found
+        raise
+
+def has_bot_responded_to_message(channel, message_ts):
+    """Check if bot already responded to this specific message"""
+    try:
+        bot_user_id = app.client.auth_test()["user_id"]
+        response = app.client.conversations_replies(
+            channel=channel,
+            ts=message_ts,
+            limit=10
+        )
+        
+        # Check if bot replied immediately after this specific message
+        messages = response.get('messages', [])
+        if len(messages) < 2:
+            return False
+            
+        # Look for bot response right after the user message
+        user_msg_ts = float(message_ts)
+        for msg in messages[1:]:  # Skip original message
+            if (msg.get('user') == bot_user_id and 
+                float(msg.get('ts', 0)) > user_msg_ts):
+                return True
+        return False
+    except:
+        return False
 
 def get_session_context(thread_ts, channel):
     """Get session ID and context for thread"""
@@ -143,26 +183,25 @@ def handle_mention(event, say, ack):
     # Acknowledge the event immediately
     ack()
     
-    # Clean up old events periodically
-    cleanup_processed_events()
-    
     # Multi-layer deduplication
-    event_id = f"{event['channel']}_{event['ts']}"
-    content_hash = hash(f"{event['text']}_{event['user']}_{event['channel']}")
+    event_id = create_robust_event_id(event)
     
-    if event_id in processed_events or content_hash in processed_events:
-        print(f"Duplicate blocked: {event_id} or {content_hash}")
+    if is_duplicate_event(event_id):
+        print(f"Duplicate event blocked: {event_id}")
         return
     
-    processed_events[event_id] = time.time()
-    processed_events[content_hash] = time.time()
+    # Check if bot already responded to this specific message
+    if has_bot_responded_to_message(event["channel"], event["ts"]):
+        print(f"Already responded to message: {event['ts']}")
+        return
+    
+    thread_ts = event.get("thread_ts") or event["ts"]
     
     # Extract query (remove bot mention)
     user_id = app.client.auth_test()["user_id"]
     query = event["text"].replace(f"<@{user_id}>", "").strip()
     
-    # Get thread context
-    thread_ts = event.get("thread_ts") or event["ts"]
+    # Get thread context (thread_ts already set above)
     channel = event["channel"]
     session_id, context_summary = get_session_context(thread_ts, channel)
     

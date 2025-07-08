@@ -50,7 +50,7 @@ functions:
       - http:
           path: /slack/events
           method: post
-    reservedConcurrency: 10
+    reservedConcurrency: 1
 
 resources:
   Resources:
