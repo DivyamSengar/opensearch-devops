@@ -186,6 +186,10 @@ def handle_mention(event, say, ack):
         )
 
 # Lambda handler
+#fix table last_cleanup = time.time() update so it isn't so static/wrong: the idea being that it seems to initiate the time 
+#only at the start/app buildup so it doesn't seem to be accurate
+#need to add a constant spinning time counter or perhaps add the time.time() update 
+#for last cleanup to be unique to each session/thread --> this would solve the issue, actually
 def lambda_handler(event, context):
     slack_handler = SlackRequestHandler(app=app)
     return slack_handler.handle(event, context)
