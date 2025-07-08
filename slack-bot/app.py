@@ -177,9 +177,8 @@ def query_knowledge_base(query, session_id=None, context_summary=None):
     response = bedrock_client.retrieve_and_generate(**request)
     return response['output']['text'], response.get('sessionId')
 
-@app.event("app_mention")
-def handle_mention(event, say, ack):
-    """Handle direct mentions of the bot"""
+def handle_message_common(event, say, ack, is_dm=False):
+    """Common message handling logic for both mentions and DMs"""
     # Acknowledge the event immediately
     ack()
     
@@ -197,11 +196,15 @@ def handle_mention(event, say, ack):
     
     thread_ts = event.get("thread_ts") or event["ts"]
     
-    # Extract query (remove bot mention)
-    user_id = app.client.auth_test()["user_id"]
-    query = event["text"].replace(f"<@{user_id}>", "").strip()
+    # Extract query
+    if is_dm:
+        query = event["text"].strip()
+    else:
+        # Remove bot mention for channel messages
+        user_id = app.client.auth_test()["user_id"]
+        query = event["text"].replace(f"<@{user_id}>", "").strip()
     
-    # Get thread context (thread_ts already set above)
+    # Get thread context
     channel = event["channel"]
     session_id, context_summary = get_session_context(thread_ts, channel)
     
@@ -212,17 +215,29 @@ def handle_mention(event, say, ack):
         # Store context for future use
         store_session_context(thread_ts, channel, new_session_id, query, response_text)
         
-        # Reply in thread
+        # Reply in thread (or DM)
         say(
             text=response_text,
-            thread_ts=thread_ts
+            thread_ts=thread_ts if not is_dm else None
         )
         
     except Exception as e:
         say(
             text=f"❌ Sorry, I encountered an error: {str(e)}",
-            thread_ts=thread_ts
+            thread_ts=thread_ts if not is_dm else None
         )
+
+@app.event("app_mention")
+def handle_mention(event, say, ack):
+    """Handle direct mentions of the bot"""
+    handle_message_common(event, say, ack, is_dm=False)
+
+@app.event("message")
+def handle_dm(event, say, ack):
+    """Handle direct messages to the bot"""
+    # Only handle DMs (not channel messages)
+    if event.get("channel_type") == "im":
+        handle_message_common(event, say, ack, is_dm=True)
 
 # Lambda handler
 #fix table last_cleanup = time.time() update so it isn't so static/wrong: the idea being that it seems to initiate the time 
