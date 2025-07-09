@@ -215,16 +215,16 @@ def handle_message_common(event, say, ack, is_dm=False):
         # Store context for future use
         store_session_context(thread_ts, channel, new_session_id, query, response_text)
         
-        # Reply in thread (or DM)
+        # Reply in thread (both channels and DMs support threading)
         say(
             text=response_text,
-            thread_ts=thread_ts if not is_dm else None
+            thread_ts=thread_ts
         )
         
     except Exception as e:
         say(
             text=f"❌ Sorry, I encountered an error: {str(e)}",
-            thread_ts=thread_ts if not is_dm else None
+            thread_ts=thread_ts
         )
 
 @app.event("app_mention")
