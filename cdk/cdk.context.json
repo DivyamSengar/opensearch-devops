@@ -1,0 +1,3 @@
+{
+  "aws:cdk:toolkit:default-region": "us-west-2"
+}
