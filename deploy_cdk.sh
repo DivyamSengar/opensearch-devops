@@ -149,68 +149,9 @@ LAMBDA_FUNCTION_NAME=$(AWS_DEFAULT_REGION=$AWS_REGION aws cloudformation describ
 SECRETS_ARN=$(AWS_DEFAULT_REGION=$AWS_REGION aws cloudformation describe-stacks --stack-name OscarSlackBotStack --query "Stacks[0].Outputs[?OutputKey=='SlackSecretsArn'].OutputValue" --output text --region $AWS_REGION)
 WEBHOOK_URL=$(AWS_DEFAULT_REGION=$AWS_REGION aws cloudformation describe-stacks --stack-name OscarSlackBotStack --query "Stacks[0].Outputs[?OutputKey=='SlackWebhookUrl'].OutputValue" --output text --region $AWS_REGION)
 
-# Prepare Lambda package
-echo "Preparing Lambda package..."
-mkdir -p lambda_package
-cp slack-bot/app.py lambda_package/
-cp slack-bot/requirements.txt lambda_package/
-
-# Modify app.py to use Secrets Manager
-echo "Updating app.py to use Secrets Manager..."
-cat > lambda_package/secrets_manager_patch.py << 'EOF'
-import json
-import boto3
-from botocore.exceptions import ClientError
-
-# Initialize Secrets Manager client
-secrets_client = boto3.client('secretsmanager')
-
-def get_slack_secrets():
-    """Get Slack credentials from Secrets Manager"""
-    try:
-        secret_arn = os.environ.get('SLACK_SECRETS_ARN')
-        response = secrets_client.get_secret_value(SecretId=secret_arn)
-        secrets = json.loads(response['SecretString'])
-        return secrets.get('SLACK_BOT_TOKEN'), secrets.get('SLACK_SIGNING_SECRET')
-    except ClientError as e:
-        print(f"Error retrieving secrets: {e}")
-        raise
-EOF
-
-# Prepend the secrets manager code to app.py
-cat lambda_package/secrets_manager_patch.py lambda_package/app.py > lambda_package/app.py.new
-mv lambda_package/app.py.new lambda_package/app.py
-
-# Replace environment variable initialization in app.py
-sed -i.bak 's/# Initialize Slack app/# Get Slack credentials from Secrets Manager\nslack_token, slack_signing_secret = get_slack_secrets()\n\n# Initialize Slack app/g' lambda_package/app.py
-sed -i.bak 's/token=os.environ.get("SLACK_BOT_TOKEN")/token=slack_token/g' lambda_package/app.py
-sed -i.bak 's/signing_secret=os.environ.get("SLACK_SIGNING_SECRET")/signing_secret=slack_signing_secret/g' lambda_package/app.py
-
-# Install dependencies
-echo "Installing Lambda dependencies..."
-pip install -r lambda_package/requirements.txt -t lambda_package/
-
-# Create deployment package
-echo "Creating Lambda deployment package..."
-cd lambda_package
-zip -r ../lambda_package.zip .
-cd ..
-
-# Update Lambda function code
-echo "Updating Lambda function code..."
-AWS_DEFAULT_REGION=$AWS_REGION aws lambda update-function-code --function-name $LAMBDA_FUNCTION_NAME --zip-file fileb://lambda_package.zip --region $AWS_REGION
-
-# Update Lambda environment variables
-echo "Updating Lambda environment variables..."
-AWS_DEFAULT_REGION=$AWS_REGION aws lambda update-function-configuration \
-  --function-name $LAMBDA_FUNCTION_NAME \
-  --environment "Variables={KNOWLEDGE_BASE_ID=$KNOWLEDGE_BASE_ID,MODEL_ARN=$MODEL_ARN,SLACK_SECRETS_ARN=$SECRETS_ARN}" \
-  --region $AWS_REGION
-
-# Clean up
-echo "Cleaning up..."
-rm -rf lambda_package
-rm -f lambda_package.zip
+# Update the Lambda function with the full code
+echo "Updating Lambda function with full code..."
+./deploy_lambda.sh
 
 # Update Secrets Manager with Slack credentials if .env exists
 if [ -f "slack-bot/.env" ]; then

@@ -1,4 +1,3 @@
-
 import os
 import boto3
 import json
@@ -8,10 +7,27 @@ from slack_bolt import App
 from slack_bolt.adapter.aws_lambda import SlackRequestHandler
 from botocore.exceptions import ClientError
 
+# Initialize Secrets Manager client
+secrets_client = boto3.client('secretsmanager')
+
+def get_slack_secrets():
+    """Get Slack credentials from Secrets Manager"""
+    try:
+        secret_arn = os.environ.get('SLACK_SECRETS_ARN')
+        response = secrets_client.get_secret_value(SecretId=secret_arn)
+        secrets = json.loads(response['SecretString'])
+        return secrets.get('SLACK_BOT_TOKEN'), secrets.get('SLACK_SIGNING_SECRET')
+    except ClientError as e:
+        print(f"Error retrieving secrets: {e}")
+        raise
+
+# Get Slack credentials from Secrets Manager
+slack_token, slack_signing_secret = get_slack_secrets()
+
 # Initialize Slack app
 app = App(
-    token=os.environ.get("SLACK_BOT_TOKEN"),
-    signing_secret=os.environ.get("SLACK_SIGNING_SECRET"),
+    token=slack_token,
+    signing_secret=slack_signing_secret,
     process_before_response=True
 )
 
@@ -180,7 +196,7 @@ def query_knowledge_base(query, session_id=None, context_summary=None):
 def handle_message_common(event, say, ack, is_dm=False):
     """Common message handling logic for both mentions and DMs"""
     # Acknowledge the event immediately
-    ack()
+    # ack()
     
     # Multi-layer deduplication
     event_id = create_robust_event_id(event)
@@ -204,6 +220,16 @@ def handle_message_common(event, say, ack, is_dm=False):
         user_id = app.client.auth_test()["user_id"]
         query = event["text"].replace(f"<@{user_id}>", "").strip()
     
+    # Add an emoji reaction to acknowledge the message
+    try:
+        app.client.reactions_add(
+            channel=event["channel"],
+            timestamp=event["ts"],
+            name="eyes"  # Using the 👀 emoji to indicate the bot is processing
+        )
+    except Exception as e:
+        print(f"Error adding reaction: {e}")
+    
     # Get thread context
     channel = event["channel"]
     session_id, context_summary = get_session_context(thread_ts, channel)
@@ -221,7 +247,39 @@ def handle_message_common(event, say, ack, is_dm=False):
             thread_ts=thread_ts
         )
         
+        # Replace the "eyes" reaction with a "white_check_mark" to indicate completion
+        try:
+            # Remove the processing reaction
+            app.client.reactions_remove(
+                channel=event["channel"],
+                timestamp=event["ts"],
+                name="eyes"
+            )
+            # Add the completion reaction
+            app.client.reactions_add(
+                channel=event["channel"],
+                timestamp=event["ts"],
+                name="white_check_mark"  # Using the ✅ emoji to indicate completion
+            )
+        except Exception as e:
+            print(f"Error updating reaction: {e}")
+        
     except Exception as e:
+        # Replace the "eyes" reaction with an "x" to indicate an error
+        try:
+            app.client.reactions_remove(
+                channel=event["channel"],
+                timestamp=event["ts"],
+                name="eyes"
+            )
+            app.client.reactions_add(
+                channel=event["channel"],
+                timestamp=event["ts"],
+                name="x"  # Using the ❌ emoji to indicate an error
+            )
+        except Exception as reaction_error:
+            print(f"Error updating reaction: {reaction_error}")
+            
         say(
             text=f"❌ Sorry, I encountered an error: {str(e)}",
             thread_ts=thread_ts
@@ -240,10 +298,6 @@ def handle_dm(event, say, ack):
         handle_message_common(event, say, ack, is_dm=True)
 
 # Lambda handler
-#fix table last_cleanup = time.time() update so it isn't so static/wrong: the idea being that it seems to initiate the time 
-#only at the start/app buildup so it doesn't seem to be accurate
-#need to add a constant spinning time counter or perhaps add the time.time() update 
-#for last cleanup to be unique to each session/thread --> this would solve the issue, actually
 def lambda_handler(event, context):
     slack_handler = SlackRequestHandler(app=app)
     return slack_handler.handle(event, context)

@@ -2,6 +2,7 @@ from aws_cdk import (
     Stack,
     Duration,
     RemovalPolicy,
+    CustomResource,
     aws_lambda as lambda_,
     aws_dynamodb as dynamodb,
     aws_iam as iam,
@@ -9,6 +10,7 @@ from aws_cdk import (
     aws_s3 as s3,
     aws_s3_deployment as s3_deployment,
     aws_apigateway as apigateway,
+    aws_logs as logs,
     CfnOutput
 )
 from constructs import Construct
@@ -71,6 +73,27 @@ class OscarSlackBotStack(Stack):
         except Exception as e:
             print(f"Warning: Could not deploy documents to S3 bucket: {e}")
             print("Continuing without document deployment...")
+            
+        # Create IAM role for Bedrock Knowledge Base
+        kb_role = iam.Role(
+            self, "BedrockKnowledgeBaseRole",
+            assumed_by=iam.ServicePrincipal("bedrock.amazonaws.com"),
+            role_name=f"OscarBedrockKBRole-{self.account}-{self.region}"
+        )
+        
+        # Add permissions for S3
+        kb_role.add_to_policy(
+            iam.PolicyStatement(
+                actions=[
+                    "s3:GetObject",
+                    "s3:ListBucket"
+                ],
+                resources=[
+                    docs_bucket.bucket_arn,
+                    f"{docs_bucket.bucket_arn}/*"
+                ]
+            )
+        )
 
         # Create Lambda function
         lambda_role = iam.Role(
