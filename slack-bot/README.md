@@ -17,7 +17,7 @@ The OSCAR Slack bot is built using the following components:
 #### 1. Event Handling
 The bot handles two main types of events:
 - **Mentions**: When the bot is mentioned in a channel (`@oscar`)
-- **Direct Messages**: When users send private messages to the bot
+- **Direct Messages** (toggleable via cdk script command line): When users send private messages to the bot
 
 #### 2. Context Management
 - **Thread-Based Context**: Messages in the same thread maintain conversation context
@@ -41,12 +41,35 @@ The bot handles two main types of events:
 
 ## Code Structure
 
-- **app.py**: Main application code with event handlers and business logic
+The codebase follows a modular design pattern with clear separation of concerns:
+
+### Core Modules
+
+- **app.py**: Main Lambda handler entry point
 - **socket_app.py**: Alternative implementation for WebSocket-based deployments
+- **oscar/**: Core functionality package
+  - **__init__.py**: Package initialization
+  - **config.py**: Configuration management
+  - **storage.py**: Session and context storage
+  - **bedrock.py**: Knowledge base integration
+  - **slack_handler.py**: Slack event handling
+
+### Support Files
+
 - **requirements.txt**: Python dependencies
 - **deploy.sh**: Deployment script for Serverless Framework
 - **.env**: Environment variables (not committed to repository)
 - **.env.example**: Example environment variables template
+- **serverless.yml**: Serverless Framework configuration
+
+### Tests
+
+- **tests/**: Unit tests for all modules
+  - **test_config.py**: Tests for configuration module
+  - **test_storage.py**: Tests for storage implementations
+  - **test_bedrock.py**: Tests for knowledge base integration
+  - **test_slack_handler.py**: Tests for Slack event handling
+  - **run_tests.sh**: Script to run all tests with coverage report
 
 ## Environment Variables
 
@@ -59,42 +82,20 @@ KNOWLEDGE_BASE_ID=your-bedrock-knowledge-base-id
 MODEL_ARN=arn:aws:bedrock:region:account:inference-profile/model-id
 ```
 
-## Deployment (Serverless Framework)
+Optional environment variables:
 
-This directory contains a Serverless Framework deployment configuration as an alternative to the CDK deployment.
-
-### Prerequisites
-
-1. Node.js and npm installed
-2. Serverless Framework installed (`npm install -g serverless`)
-3. AWS credentials configured
-4. Slack app created with appropriate permissions
-
-### Deployment Steps
-
-1. Configure environment variables:
-   ```bash
-   cp .env.example .env
-   # Edit .env with your values
-   ```
-
-2. Deploy using the provided script:
-   ```bash
-   chmod +x deploy.sh
-   ./deploy.sh
-   ```
-
-3. Configure Slack app with the webhook URL from the deployment output
-
-### Serverless Configuration
-
-The `serverless.yml` file defines:
-
-- Lambda function configuration
-- API Gateway endpoint
-- DynamoDB tables
-- IAM permissions
-- Environment variables
+```
+AWS_REGION=us-west-2
+SLACK_SECRETS_ARN=arn:aws:secretsmanager:region:account:secret:name
+SESSIONS_TABLE_NAME=oscar-sessions
+CONTEXT_TABLE_NAME=oscar-context
+DEDUP_TTL=300
+SESSION_TTL=3600
+CONTEXT_TTL=172800
+MAX_CONTEXT_LENGTH=3000
+CONTEXT_SUMMARY_LENGTH=500
+PROMPT_TEMPLATE=custom prompt template
+```
 
 ## Usage Examples
 
@@ -133,14 +134,25 @@ To test the bot locally:
    python socket_app.py
    ```
 
+### Running Tests
+
+Run the test suite with coverage report:
+
+```bash
+cd slack-bot
+chmod +x tests/run_tests.sh
+./tests/run_tests.sh
+```
+
 ### Adding Features
 
 When adding new features:
 
-1. Update the appropriate event handler in app.py
-2. Test locally using socket mode
-3. Update the deployment configuration if necessary
-4. Deploy using either CDK or Serverless Framework
+1. Update the appropriate module in the `oscar` package
+2. Add tests for the new functionality
+3. Test locally using socket mode
+4. Update the deployment configuration if necessary
+5. Deploy using either CDK or Serverless Framework
 
 ### Updating the Lambda Function
 
@@ -149,7 +161,7 @@ To update just the Lambda function code:
 ```bash
 # Create a deployment package with dependencies
 mkdir -p lambda_package
-cp app.py lambda_package/
+cp -r app.py oscar lambda_package/
 pip install -r requirements.txt -t lambda_package/
 cd lambda_package
 zip -r ../lambda_package.zip .
@@ -189,3 +201,31 @@ rm lambda_package.zip
 4. **Emoji Reactions Not Working**:
    - Verify the bot has the `reactions:write` scope
    - Check Lambda function logs for reaction-related errors
+
+## Design Decisions
+
+### Modular Architecture
+
+The codebase follows a modular design with clear separation of concerns:
+
+- **Configuration**: Centralized in `config.py` with environment variable support
+- **Storage**: Abstract interface with multiple implementations (DynamoDB, in-memory)
+- **Knowledge Base**: Abstract interface for Bedrock integration with mock implementation for testing
+- **Slack Handler**: Encapsulates all Slack-specific logic and event handling
+
+### Interface-Based Design
+
+Abstract base classes are used for key components to enable:
+
+- **Testability**: Mock implementations for unit testing
+- **Flexibility**: Easy to swap implementations (e.g., different storage backends)
+- **Maintainability**: Clear contracts between components
+
+### Error Handling
+
+Comprehensive error handling strategy:
+
+- **Graceful Degradation**: Fallback mechanisms for API failures
+- **Visual Feedback**: Emoji reactions indicate processing status
+- **Logging**: Detailed logs for troubleshooting
+- **User Communication**: Clear error messages for end users

@@ -1,89 +1,53 @@
+"""
+OSCAR - OpenSearch Conversational Automation for Release 
+
+Legacy Socket mode app that was used for local development and testing.
+"""
+
 import os
-import boto3
-import time
+import logging
+from dotenv import load_dotenv
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
-from dotenv import load_dotenv
+from oscar.config import config
+from oscar.slack_handler import SlackHandler
+from oscar.storage import get_storage
+from oscar.bedrock import get_knowledge_base
 
-# Load environment variables
+# Load environment variables from .env file
 load_dotenv()
 
-# In-memory session storage for Socket Mode
-sessions = {}
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
-# Socket Mode App (no webhooks needed)
+# Get Slack credentials
+slack_token, slack_signing_secret = config.get_slack_credentials()
+slack_app_token = os.environ.get("SLACK_APP_TOKEN")
+
+if not slack_app_token or not slack_token:
+    logger.error("Missing required environment variables SLACK_APP_TOKEN or SLACK_BOT_TOKEN")
+    exit(1)
+
+# Initialize Slack app
 app = App(
-    token=os.environ.get("SLACK_BOT_TOKEN"),
-    signing_secret=os.environ.get("SLACK_SIGNING_SECRET")
+    token=slack_token,
+    signing_secret=slack_signing_secret
 )
 
-# Same bedrock/dynamodb setup as before
-bedrock_client = boto3.client('bedrock-agent-runtime', region_name='us-west-2')
+# Initialize storage and knowledge base
+# Use in-memory storage for local development
+storage = get_storage(storage_type='memory')
+knowledge_base = get_knowledge_base(kb_type='mock')
 
-def get_session_id(thread_ts, channel):
-    """Get session ID for thread context"""
-    if thread_ts:
-        session_key = f"{channel}_{thread_ts}"
-        return sessions.get(session_key)
-    return None
-
-def store_session_id(thread_ts, channel, session_id):
-    """Store session ID for thread"""
-    if thread_ts and session_id:
-        session_key = f"{channel}_{thread_ts}"
-        sessions[session_key] = session_id
-
-def query_knowledge_base(query, session_id=None):
-    """Query with optional session context"""
-    request = {
-        'input': {'text': query},
-        'retrieveAndGenerateConfiguration': {
-            'type': 'KNOWLEDGE_BASE',
-            'knowledgeBaseConfiguration': {
-                'knowledgeBaseId': os.environ.get('KNOWLEDGE_BASE_ID'),
-                'modelArn': os.environ.get('MODEL_ARN'),
-                'orchestrationConfiguration': {
-                    'queryTransformationConfiguration': {
-                        'type': 'QUERY_DECOMPOSITION'
-                    }
-                },
-                'generationConfiguration': {
-                    'promptTemplate': {
-                        'textPromptTemplate': "You are OSCAR, an AI assistant for OpenSearch release management. Answer questions using the provided search results. Here are the search results: $search_results$\n\nQuestion: $query$\n\nAnswer:"
-                    }
-                }
-            }
-        }
-    }
-    
-    if session_id:
-        request['sessionId'] = session_id
-    
-    response = bedrock_client.retrieve_and_generate(**request)
-    return response['output']['text'], response.get('sessionId')
-
-@app.event("app_mention")
-def handle_mention(event, say):
-    # Remove bot mention from query
-    user_id = app.client.auth_test()["user_id"]
-    query = event["text"].replace(f"<@{user_id}>", "").strip()
-    
-    # Get thread context
-    thread_ts = event.get("thread_ts") or event["ts"]
-    channel = event["channel"]
-    session_id = get_session_id(thread_ts, channel)
-    
-    try:
-        response_text, new_session_id = query_knowledge_base(query, session_id)
-        
-        # Store session for thread context
-        if new_session_id:
-            store_session_id(thread_ts, channel, new_session_id)
-        
-        say(text=f"🤖 {response_text}", thread_ts=thread_ts)
-    except Exception as e:
-        say(text=f"❌ Error: {str(e)}", thread_ts=thread_ts)
+# Initialize and register Slack handler
+handler = SlackHandler(app, storage, knowledge_base)
+handler.register_handlers()
 
 if __name__ == "__main__":
-    handler = SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"])
-    handler.start()
+    # Start the Socket Mode handler
+    logger.info("Starting OSCAR Slack Bot in Socket Mode...")
+    SocketModeHandler(app, slack_app_token).start()

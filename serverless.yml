@@ -11,6 +11,7 @@ provider:
     SLACK_SIGNING_SECRET: ${env:SLACK_SIGNING_SECRET}
     KNOWLEDGE_BASE_ID: ${env:KNOWLEDGE_BASE_ID}
     MODEL_ARN: ${env:MODEL_ARN}
+    ENABLE_DM: ${env:ENABLE_DM, 'false'}
   iamRoleStatements:
     - Effect: Allow
       Action:
@@ -45,7 +46,7 @@ provider:
         - "arn:aws:dynamodb:${self:provider.region}:*:table/oscar-context"
 functions:
   slack-bot:
-    handler: app.lambda_handler
+    handler: slack-bot/app.lambda_handler
     events:
       - http:
           path: /slack/events
@@ -86,3 +87,12 @@ resources:
 
 plugins:
   - serverless-python-requirements
+
+package:
+  include:
+    - slack-bot/**
+  exclude:
+    - slack-bot/tests/**
+    - slack-bot/.pytest_cache/**
+    - slack-bot/.serverless/**
+    - slack-bot/node_modules/**

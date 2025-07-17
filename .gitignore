@@ -9,7 +9,8 @@ DEPLOYMENT_GUIDE.md
 cdk.out/
 .cdk.staging/
 cdk-outputs.json
-
+slack-bot/.pytest_cache
+slack-bot/node_modules
 # Python
 __pycache__/
 *.py[cod]

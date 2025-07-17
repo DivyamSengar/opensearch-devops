@@ -169,9 +169,26 @@ def lambda_handler(event, context):
             timeout=Duration.seconds(30),
             memory_size=512,
             environment={
+                # Required configuration
                 "KNOWLEDGE_BASE_ID": os.environ.get("KNOWLEDGE_BASE_ID", "PLACEHOLDER_KNOWLEDGE_BASE_ID"),
                 "MODEL_ARN": os.environ.get("MODEL_ARN", "arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-v2"),
-                "SLACK_SECRETS_ARN": slack_secrets.secret_arn
+                "SLACK_SECRETS_ARN": slack_secrets.secret_arn,
+                
+                # Optional configuration
+                # Note: AWS_REGION is a reserved environment variable in Lambda and cannot be set manually
+                "SESSIONS_TABLE_NAME": os.environ.get("SESSIONS_TABLE_NAME", "oscar-sessions"),
+                "CONTEXT_TABLE_NAME": os.environ.get("CONTEXT_TABLE_NAME", "oscar-context"),
+                "DEDUP_TTL": os.environ.get("DEDUP_TTL", "300"),
+                "SESSION_TTL": os.environ.get("SESSION_TTL", "3600"),
+                "CONTEXT_TTL": os.environ.get("CONTEXT_TTL", "172800"),
+                "MAX_CONTEXT_LENGTH": os.environ.get("MAX_CONTEXT_LENGTH", "3000"),
+                "CONTEXT_SUMMARY_LENGTH": os.environ.get("CONTEXT_SUMMARY_LENGTH", "500"),
+                
+                # Feature flags
+                "ENABLE_DM": os.environ.get("ENABLE_DM", "false"),
+                
+                # Prompt template (if provided)
+                **({"PROMPT_TEMPLATE": os.environ.get("PROMPT_TEMPLATE")} if os.environ.get("PROMPT_TEMPLATE") else {})
             },
             role=lambda_role
         )
