@@ -22,7 +22,7 @@ The bot handles two main types of events:
 #### 2. Context Management
 - **Thread-Based Context**: Messages in the same thread maintain conversation context
 - **Session Storage**: Uses DynamoDB to store session IDs and conversation history
-- **TTL Mechanism**: Automatically expires old sessions (1 hour) and context (48 hours)
+- **TTL Mechanism**: Automatically expires old sessions (1 hour) and context (configurable parameter currently set to 7 days)
 
 #### 3. Knowledge Base Integration
 - **Amazon Bedrock**: Uses Bedrock's RetrieveAndGenerate API for knowledge base queries
